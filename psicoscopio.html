@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Psicoscópio · M&M</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:ital,wght@0,400;1,400&display=swap');
+  :root{
+    --bg:#060608;--surface:#0e0e12;--border:#1a1a22;
+    --accent:#e8d5a3;--accent2:#c4a882;--text:#e8e8e8;--muted:#444;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+  /* Canvas */
+  #canvas{display:block;width:100%;flex:1;cursor:crosshair}
+
+  /* UI Panel */
+  .panel{background:rgba(6,6,8,.92);border-top:1px solid var(--border);padding:12px 16px;display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+  .panel-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .title-block{margin-right:auto}
+  .eyebrow{font-size:8px;letter-spacing:.3em;color:var(--accent);text-transform:uppercase;opacity:.6}
+  .title{font-family:'Playfair Display',serif;font-size:18px;font-weight:400;letter-spacing:-.01em}
+  .title em{font-style:italic;color:var(--accent)}
+
+  /* Buttons */
+  .btn{background:transparent;border:1px solid var(--border);padding:7px 14px;cursor:pointer;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);transition:all .15s;white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+  .btn.record{border-color:#3a1010}
+  .btn.record:hover{border-color:#c0392b;color:#c0392b}
+  .btn.recording{border-color:#c0392b;color:#c0392b;animation:pulse .8s ease-in-out infinite}
+
+  /* Image slots */
+  .slots{display:flex;gap:4px;flex-wrap:wrap}
+  .slot{width:40px;height:40px;border:1px dashed #222;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:7px;color:#333;letter-spacing:.05em;text-align:center;line-height:1.3;position:relative;overflow:hidden;transition:border-color .15s;flex-shrink:0}
+  .slot:hover{border-color:#444}
+  .slot.loaded{border-color:#333;border-style:solid}
+  .slot img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+  .slot .band{position:absolute;bottom:2px;right:2px;font-size:6px;color:var(--accent);opacity:.7;letter-spacing:.05em}
+  .slot .remove{position:absolute;top:1px;right:2px;font-size:8px;color:#c0392b;display:none;cursor:pointer;z-index:2}
+  .slot.loaded:hover .remove{display:block}
+  .slot input{display:none}
+
+  /* Audio */
+  .audio-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .audio-name{font-size:8px;color:var(--muted);letter-spacing:.08em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  
+  /* Status */
+  .status{font-size:8px;color:var(--muted);letter-spacing:.1em;text-align:center;padding:2px 0}
+
+  /* Sliders */
+  .sliders{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .sl-row{display:flex;align-items:center;gap:6px}
+  .sl-label{font-size:7px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;width:32px}
+  input[type=range]{-webkit-appearance:none;height:2px;background:#1a1a1a;outline:none;cursor:pointer;width:70px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;background:var(--accent);border-radius:50%}
+  .sl-val{font-size:7px;color:var(--accent);width:24px}
+
+  @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+  @media(max-width:600px){.sliders{display:none}.panel-top{gap:8px}}
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div class="panel">
+  <div class="panel-top">
+    <div class="title-block">
+      <div class="eyebrow">MorAIs &amp; Moreira</div>
+      <div class="title">Psico<em>scópio</em></div>
+    </div>
+
+    <!-- Image slots -->
+    <div class="slots" id="slots"></div>
+
+    <!-- Controls -->
+    <button class="btn" id="btnAudio" onclick="document.getElementById('audioInput').click()">+ Áudio</button>
+    <input type="file" id="audioInput" accept="audio/*,video/*" style="display:none">
+    <button class="btn" id="btnPlay" onclick="togglePlay()" disabled>▶ Play</button>
+    <button class="btn record" id="btnRec" onclick="toggleRecord()">⏺ Gravar</button>
+    <button class="btn" onclick="downloadVideo()" id="btnDown" style="display:none">↓ Baixar</button>
+  </div>
+
+  <div class="sliders">
+    <div class="sl-row">
+      <span class="sl-label">Blur</span>
+      <input type="range" id="slBlur" min="0" max="1" step="0.01" value="0.15">
+      <span class="sl-val" id="valBlur">.15</span>
+    </div>
+    <div class="sl-row">
+      <span class="sl-label">Motion</span>
+      <input type="range" id="slMotion" min="0.1" max="3" step="0.1" value="1">
+      <span class="sl-val" id="valMotion">1.0</span>
+    </div>
+    <div class="sl-row">
+      <span class="sl-label">Glow</span>
+      <input type="range" id="slGlow" min="0" max="1" step="0.01" value="0.4">
+      <span class="sl-val" id="valGlow">.40</span>
+    </div>
+    <div class="sl-row">
+      <span class="sl-label">Scale</span>
+      <input type="range" id="slScale" min="0.1" max="1" step="0.01" value="0.45">
+      <span class="sl-val" id="valScale">.45</span>
+    </div>
+  </div>
+
+  <div class="status" id="status">Carregue imagens e um arquivo de áudio para começar</div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+const MAX_IMAGES = 4;
+const BANDS = ['Bass', 'Low', 'Mid', 'High'];
+const BAND_COLORS = ['#e8a0a0','#a0c8e8','#a0e8b0','#e8d5a3'];
+
+let images = [null, null, null, null]; // ImageBitmap per slot
+let imgAngles = [0,0,0,0];
+let imgScales = [1,1,1,1];
+let imgX = [0,0,0,0];
+let imgY = [0,0,0,0];
+let imgPhase = [0, Math.PI/2, Math.PI, Math.PI*1.5];
+
+let audioCtx, analyser, source, audioBuffer;
+let isPlaying = false;
+let startTime = 0, startOffset = 0;
+let animFrame;
+
+// Recorder
+let mediaRecorder, recordedChunks = [], isRecording = false, recordedBlob = null;
+
+// Params
+let pBlur = 0.15, pMotion = 1, pGlow = 0.4, pScale = 0.45;
+
+// ── Build slots ────────────────────────────────────────────────────────────
+const slotsEl = document.getElementById('slots');
+for (let i = 0; i < MAX_IMAGES; i++) {
+  const slot = document.createElement('div');
+  slot.className = 'slot';
+  slot.id = `slot${i}`;
+  slot.innerHTML = `
+    <input type="file" accept="image/*" onchange="loadImage(${i}, this)">
+    <span class="remove" onclick="clearSlot(${i}, event)">✕</span>
+    <span class="band" id="band${i}">${BANDS[i]}</span>
+    <span style="font-size:7px;color:#333;letter-spacing:.05em">IMG<br>${i+1}</span>
+  `;
+  slot.addEventListener('click', () => slot.querySelector('input').click());
+  slotsEl.appendChild(slot);
+}
+
+async function loadImage(idx, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const bitmap = await createImageBitmap(file);
+  images[idx] = bitmap;
+  const slot = document.getElementById(`slot${idx}`);
+  slot.classList.add('loaded');
+  // Preview
+  let img = slot.querySelector('img');
+  if (!img) { img = document.createElement('img'); slot.appendChild(img); }
+  img.src = URL.createObjectURL(file);
+  // Random initial phase
+  imgPhase[idx] = Math.random() * Math.PI * 2;
+  setStatus('Imagem carregada no slot ' + (idx+1) + ' · ' + BANDS[idx]);
+}
+
+function clearSlot(idx, e) {
+  e.stopPropagation();
+  images[idx] = null;
+  const slot = document.getElementById(`slot${idx}`);
+  slot.classList.remove('loaded');
+  const img = slot.querySelector('img');
+  if (img) img.remove();
+}
+
+// ── Audio ──────────────────────────────────────────────────────────────────
+document.getElementById('audioInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setStatus('Carregando áudio...');
+  if (!audioCtx) initAudio();
+  try {
+    const ab = await file.arrayBuffer();
+    audioBuffer = await audioCtx.decodeAudioData(ab);
+    document.getElementById('btnPlay').disabled = false;
+    document.getElementById('btnAudio').textContent = '♪ ' + file.name.substring(0, 16);
+    setStatus(`Áudio carregado · ${audioBuffer.duration.toFixed(1)}s`);
+  } catch(err) {
+    setStatus('Erro ao carregar áudio. Tente .mp3 ou .m4a');
+  }
+});
+
+function initAudio() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.8;
+  analyser.connect(audioCtx.destination);
+}
+
+function togglePlay() {
+  if (!audioBuffer) return;
+  if (isPlaying) {
+    stopAudio();
+  } else {
+    playAudio();
+  }
+}
+
+function playAudio(offset = 0) {
+  if (!audioCtx || !audioBuffer) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (source) { try { source.stop(); } catch(e) {} }
+  source = audioCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(analyser);
+  source.start(0, offset);
+  source.onended = () => { isPlaying = false; document.getElementById('btnPlay').textContent = '▶ Play'; };
+  isPlaying = true;
+  startTime = audioCtx.currentTime;
+  startOffset = offset;
+  document.getElementById('btnPlay').textContent = '❚❚ Pausa';
+  if (!animFrame) draw();
+}
+
+function stopAudio() {
+  if (source) { try { source.stop(); } catch(e) {} source = null; }
+  isPlaying = false;
+  document.getElementById('btnPlay').textContent = '▶ Play';
+}
+
+// ── Get frequency bands ────────────────────────────────────────────────────
+function getBands() {
+  if (!analyser) return [0,0,0,0];
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  const sr = audioCtx.sampleRate;
+  const binHz = sr / analyser.fftSize;
+  const ranges = [[20,250],[250,800],[800,4000],[4000,20000]];
+  return ranges.map(([lo, hi]) => {
+    const s = Math.floor(lo/binHz), e = Math.min(Math.ceil(hi/binHz), data.length);
+    let sum = 0;
+    for (let i = s; i < e; i++) sum += data[i];
+    return sum / ((e - s) * 255);
+  });
+}
+
+// ── Draw ───────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let t = 0;
+
+function resize() {
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function draw() {
+  animFrame = requestAnimationFrame(draw);
+  t += 0.016;
+
+  const W = canvas.width, H = canvas.height;
+  const bands = getBands();
+  const hasAny = images.some(Boolean);
+
+  // Background — slow fade for trail effect
+  ctx.fillStyle = `rgba(6,6,8,${pBlur})`;
+  ctx.fillRect(0, 0, W, H);
+
+  if (!hasAny) {
+    // Idle visualization — frequency bars
+    drawIdleBars(W, H, bands);
+    return;
+  }
+
+  // Draw each image
+  images.forEach((img, i) => {
+    if (!img) return;
+    const band = bands[i] || 0;
+    const motion = pMotion;
+
+    // Update transforms
+    imgAngles[i] += (0.003 + band * 0.08) * motion * (i % 2 === 0 ? 1 : -1);
+    imgScales[i] = pScale + band * 0.25 * motion;
+    imgX[i] = Math.sin(t * 0.3 + imgPhase[i]) * 0.12 * W * motion;
+    imgY[i] = Math.cos(t * 0.2 + imgPhase[i] * 1.3) * 0.08 * H * motion;
+
+    const cx = W / 2 + imgX[i];
+    const cy = H / 2 + imgY[i];
+    const size = Math.min(W, H) * imgScales[i];
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(imgAngles[i]);
+
+    // Glow
+    if (pGlow > 0 && band > 0.05) {
+      ctx.shadowColor = BAND_COLORS[i];
+      ctx.shadowBlur = band * 60 * pGlow;
+    }
+
+    // Opacity driven by band
+    ctx.globalAlpha = 0.4 + band * 0.6;
+
+    // Draw image
+    ctx.drawImage(img, -size/2, -size/2, size, size);
+
+    ctx.restore();
+  });
+
+  // Subtle frequency ring overlay
+  drawRing(W/2, H/2, bands);
+}
+
+function drawIdleBars(W, H, bands) {
+  const barW = W / 4;
+  bands.forEach((b, i) => {
+    const h = b * H * 0.6;
+    ctx.fillStyle = BAND_COLORS[i] + '44';
+    ctx.fillRect(i * barW, H - h, barW - 2, h);
+  });
+  ctx.fillStyle = 'rgba(232,213,163,0.15)';
+  ctx.font = `${12 * window.devicePixelRatio}px DM Mono`;
+  ctx.textAlign = 'center';
+  ctx.fillText('Carregue imagens para visualizar', W/2, H/2);
+}
+
+function drawRing(cx, cy, bands) {
+  const avg = bands.reduce((a,b) => a+b, 0) / 4;
+  if (avg < 0.02) return;
+  const r = Math.min(canvas.width, canvas.height) * (0.3 + avg * 0.15);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(232,213,163,${avg * 0.15})`;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+// Start idle draw loop
+draw();
+
+// ── Recording ──────────────────────────────────────────────────────────────
+function toggleRecord() {
+  if (isRecording) stopRecord();
+  else startRecord();
+}
+
+function startRecord() {
+  recordedChunks = [];
+  recordedBlob = null;
+  document.getElementById('btnDown').style.display = 'none';
+
+  const stream = canvas.captureStream(30);
+
+  // Try to add audio
+  if (audioCtx && analyser) {
+    try {
+      const dest = audioCtx.createMediaStreamDestination();
+      analyser.connect(dest);
+      dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+    } catch(e) {}
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+    ? 'video/webm;codecs=vp9'
+    : MediaRecorder.isTypeSupported('video/webm')
+    ? 'video/webm' : 'video/mp4';
+
+  try {
+    mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 5000000 });
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      recordedBlob = new Blob(recordedChunks, { type: mimeType });
+      document.getElementById('btnDown').style.display = 'block';
+      setStatus(`Gravação pronta · ${(recordedBlob.size/1024/1024).toFixed(1)}MB · clique Baixar`);
+    };
+    mediaRecorder.start(100);
+    isRecording = true;
+    document.getElementById('btnRec').className = 'btn recording';
+    document.getElementById('btnRec').textContent = '⏹ Parar';
+    setStatus('Gravando...');
+    if (!isPlaying && audioBuffer) playAudio();
+  } catch(e) {
+    setStatus('Gravação não suportada neste browser. Use Chrome no desktop.');
+  }
+}
+
+function stopRecord() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  isRecording = false;
+  document.getElementById('btnRec').className = 'btn record';
+  document.getElementById('btnRec').textContent = '⏺ Gravar';
+}
+
+function downloadVideo() {
+  if (!recordedBlob) return;
+  const url = URL.createObjectURL(recordedBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `psicoscopio-${Date.now()}.webm`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Sliders ────────────────────────────────────────────────────────────────
+function setupSlider(id, valId, decimals, onSet) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    const v = parseFloat(el.value);
+    document.getElementById(valId).textContent = v.toFixed(decimals);
+    onSet(v);
+  });
+}
+setupSlider('slBlur',   'valBlur',   2, v => pBlur = v);
+setupSlider('slMotion', 'valMotion', 1, v => pMotion = v);
+setupSlider('slGlow',   'valGlow',   2, v => pGlow = v);
+setupSlider('slScale',  'valScale',  2, v => pScale = v);
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+</script>
+</body>
+</html>
