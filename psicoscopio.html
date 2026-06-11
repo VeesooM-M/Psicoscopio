@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Psicoscópio · M&M</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:ital,wght@0,400;1,400&display=swap');
+  :root{--bg:#060608;--border:#1a1a22;--accent:#e8d5a3;--muted:#444;}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;background:var(--bg);color:#e8e8e8;font-family:'DM Mono',monospace;overflow:hidden}
+  body{display:flex;flex-direction:column}
+  #canvas{display:block;width:100%;flex:1;min-height:0}
+  .panel{background:rgba(6,6,8,.95);border-top:1px solid var(--border);padding:10px 12px;display:flex;flex-direction:column;gap:7px;flex-shrink:0;max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .title-block{margin-right:auto}
+  .eyebrow{font-size:8px;letter-spacing:.28em;color:var(--accent);text-transform:uppercase;opacity:.6}
+  .title{font-family:'Playfair Display',serif;font-size:16px;font-weight:400}
+  .title em{font-style:italic;color:var(--accent)}
+  .btn{background:transparent;border:1px solid var(--border);padding:7px 11px;cursor:pointer;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);transition:all .15s;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+  .btn:hover,.btn:active{border-color:var(--accent);color:var(--accent)}
+  .btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+  .btn.rec{border-color:#3a1010}
+  .btn.rec:hover{border-color:#c0392b;color:#c0392b}
+  .btn.recording{border-color:#c0392b;color:#c0392b;animation:blink .8s ease-in-out infinite}
+  .slots{display:flex;gap:4px;flex-wrap:wrap}
+  .slot{width:42px;height:42px;border:1px dashed #222;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:7px;color:#333;text-align:center;line-height:1.4;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent;flex-shrink:0}
+  .slot:active{border-color:#444}
+  .slot.loaded{border-color:#2a2a2a;border-style:solid}
+  .slot img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;pointer-events:none}
+  .slot .blabel{position:absolute;bottom:2px;right:2px;font-size:6px;color:var(--accent);opacity:.6;pointer-events:none}
+  .slot .remx{position:absolute;top:0;right:2px;font-size:9px;color:#c0392b;display:none;cursor:pointer;z-index:3}
+  .slot.loaded:active .remx{display:block}
+  .slot input{display:none}
+  .sliders{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .sl{display:flex;align-items:center;gap:5px}
+  .sl span:first-child{font-size:7px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;width:36px}
+  input[type=range]{-webkit-appearance:none;height:2px;background:#1a1a1a;outline:none;cursor:pointer;width:60px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:var(--accent);border-radius:50%}
+  .sl .val{font-size:7px;color:var(--accent);width:26px}
+  .mode-row{display:flex;gap:4px}
+  .ctrl-section{display:none;flex-direction:column;gap:7px}
+  .ctrl-section.visible{display:flex}
+  .status{font-size:8px;color:var(--muted);letter-spacing:.07em}
+  .puzzle-img-slot{width:52px;height:52px;border:1px dashed #222;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:7px;color:#333;text-align:center;line-height:1.4;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent;flex-shrink:0}
+  .puzzle-img-slot.loaded{border-color:#2a2a2a;border-style:solid}
+  .puzzle-img-slot img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;pointer-events:none}
+  @keyframes blink{0%,100%{opacity:.4}50%{opacity:1}}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div class="panel">
+  <div class="row">
+    <div class="title-block">
+      <div class="eyebrow">MorAIs &amp; Moreira</div>
+      <div class="title">Psico<em>scópio</em></div>
+    </div>
+    <div class="mode-row">
+      <button class="btn active" id="btnModeCovers" onclick="setMode('covers')">Covers</button>
+      <button class="btn" id="btnModeInk" onclick="setMode('ink')">Ink</button>
+      <button class="btn" id="btnModePuzzle" onclick="setMode('puzzle')">Puzzle</button>
+    </div>
+    <button class="btn" onclick="document.getElementById('audioInput').click()">+ Áudio</button>
+    <input type="file" id="audioInput" accept="audio/*,video/*" style="display:none">
+    <button class="btn" id="btnPlay" onclick="togglePlay()" disabled>▶ Play</button>
+    <button class="btn rec" id="btnRec" onclick="toggleRecord()">⏺ Rec</button>
+    <button class="btn" id="btnDown" onclick="downloadVideo()" style="display:none">↓ Baixar</button>
+  </div>
+
+  <!-- COVERS controls -->
+  <div class="ctrl-section visible" id="ctrlCovers">
+    <div class="row"><div class="slots" id="slots"></div></div>
+    <div class="sliders">
+      <div class="sl"><span>Blur</span><input type="range" id="slBlur" min="0.02" max="1" step="0.01" value="0.12"><span class="val" id="vBlur">.12</span></div>
+      <div class="sl"><span>Motion</span><input type="range" id="slMotion" min="0.1" max="3" step="0.1" value="1"><span class="val" id="vMotion">1.0</span></div>
+      <div class="sl"><span>Glow</span><input type="range" id="slGlow" min="0" max="1" step="0.01" value="0.4"><span class="val" id="vGlow">.40</span></div>
+      <div class="sl"><span>Scale</span><input type="range" id="slScale" min="0.1" max="1" step="0.01" value="0.38"><span class="val" id="vScale">.38</span></div>
+    </div>
+  </div>
+
+  <!-- INK controls -->
+  <div class="ctrl-section" id="ctrlInk">
+    <div class="sliders">
+      <div class="sl"><span>Blur</span><input type="range" id="slInkBlur" min="0.002" max="0.05" step="0.001" value="0.008"><span class="val" id="vInkBlur">.008</span></div>
+      <div class="sl"><span>Motion</span><input type="range" id="slInkMotion" min="0.1" max="3" step="0.1" value="1"><span class="val" id="vInkMotion">1.0</span></div>
+      <div class="sl"><span>Density</span><input type="range" id="slInkDensity" min="1" max="20" step="1" value="8"><span class="val" id="vInkDensity">8</span></div>
+    </div>
+  </div>
+
+  <!-- PUZZLE controls -->
+  <div class="ctrl-section" id="ctrlPuzzle">
+    <div class="row">
+      <div class="puzzle-img-slot" id="puzzleImgSlot" onclick="document.getElementById('puzzleImgInput').click()">
+        <input type="file" id="puzzleImgInput" accept="image/*" style="display:none">
+        <span style="font-size:7px;color:#333">+ Imagem</span>
+      </div>
+      <div style="font-size:8px;color:var(--muted);letter-spacing:.06em;line-height:1.7;margin-left:4px">
+        Carregue áudio + imagem<br>Puzzle revela ao ritmo da música
+      </div>
+    </div>
+    <div class="sliders">
+      <div class="sl"><span>Peças</span><input type="range" id="slPieces" min="20" max="120" step="4" value="70"><span class="val" id="vPieces">70</span></div>
+      <div class="sl"><span>Rotação</span><input type="range" id="slPuzzleRot" min="0" max="1" step="0.1" value="0.5"><span class="val" id="vPuzzleRot">.5</span></div>
+    </div>
+    <div class="row">
+      <button class="btn" onclick="resetPuzzle()">↺ Reset</button>
+      <div class="status" id="puzzleProgress" style="margin-left:4px"></div>
+    </div>
+  </div>
+
+  <div class="status" id="status">Escolha um modo e carregue áudio para começar</div>
+</div>
+
+<script>
+// ── Shared state ───────────────────────────────────────────────────────────
+const BANDS=['Bass','Low','Mid','High'];
+const BAND_COLORS=['#e87070','#70a8e8','#70e898','#e8d5a3'];
+const INK_COLORS=[[232,112,112],[112,168,232],[112,232,152],[232,213,163],[200,100,200],[100,200,180],[230,180,80],[180,80,230]];
+
+let mode='covers';
+let audioCtx,analyser,source,audioBuffer;
+let isPlaying=false;
+let mediaRecorder,recordedChunks=[],isRecording=false,recordedBlob=null;
+let t=0;
+
+// Covers
+let images=[null,null,null,null];
+let imgData=[0,1,2,3].map(i=>({angle:0,scale:0.38,x:0,y:0,phase:i*Math.PI/2,orbitAngle:i*Math.PI/2,orbitSpeed:0.004+i*0.001,behavior:i}));
+let pBlur=0.12,pMotion=1,pGlow=0.4,pScale=0.38;
+
+// Ink
+let inkParticles=[];
+let pInkBlur=0.008,pInkMotion=1,pInkDensity=8;
+
+// Puzzle
+let puzzleImage=null;
+let puzzlePieces=[];
+let puzzleRevealed=0;
+let puzzleInterval=0;
+let puzzleLastReveal=0;
+let puzzleCols=0,puzzleRows=0;
+let puzzlePieceCount=70;
+let puzzleRotation=0.5;
+let puzzleStartTime=0;
+let puzzleRunning=false;
+let puzzleCanvas=document.createElement('canvas');
+
+// ── Build covers slots ─────────────────────────────────────────────────────
+const slotsEl=document.getElementById('slots');
+for(let i=0;i<4;i++){
+  const slot=document.createElement('div');
+  slot.className='slot';slot.id=`slot${i}`;
+  slot.innerHTML=`<input type="file" accept="image/*"><span class="remx" id="rem${i}">✕</span><span class="blabel">${BANDS[i]}</span><span style="font-size:7px;color:#2a2a2a">IMG<br>${i+1}</span>`;
+  slot.querySelector('input').addEventListener('change',e=>loadCoverImg(i,e));
+  slot.querySelector(`#rem${i}`).addEventListener('click',e=>{e.stopPropagation();clearSlot(i);});
+  slot.addEventListener('click',()=>slot.querySelector('input').click());
+  slotsEl.appendChild(slot);
+}
+
+async function loadCoverImg(idx,e){
+  const file=e.target.files[0];if(!file)return;
+  images[idx]=await createImageBitmap(file);
+  const slot=document.getElementById(`slot${idx}`);
+  slot.classList.add('loaded');
+  let img=slot.querySelector('img');
+  if(!img){img=document.createElement('img');slot.appendChild(img);}
+  img.src=URL.createObjectURL(file);
+  imgData[idx].orbitAngle=idx*Math.PI/2+Math.random()*0.3;
+  setStatus(`Slot ${idx+1} carregado`);
+}
+
+function clearSlot(idx){
+  images[idx]=null;
+  const slot=document.getElementById(`slot${idx}`);
+  slot.classList.remove('loaded');
+  const img=slot.querySelector('img');if(img)img.remove();
+}
+
+// ── Puzzle image ───────────────────────────────────────────────────────────
+document.getElementById('puzzleImgInput').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file)return;
+  puzzleImage=await createImageBitmap(file);
+  const slot=document.getElementById('puzzleImgSlot');
+  slot.classList.add('loaded');
+  let img=slot.querySelector('img');
+  if(!img){img=document.createElement('img');slot.appendChild(img);}
+  img.src=URL.createObjectURL(file);
+  setStatus('Imagem do puzzle carregada');
+  resetPuzzle();
+});
+
+// ── Audio ──────────────────────────────────────────────────────────────────
+document.getElementById('audioInput').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file)return;
+  setStatus('Carregando áudio...');
+  if(!audioCtx)initAudio();
+  try{
+    audioBuffer=await audioCtx.decodeAudioData(await file.arrayBuffer());
+    document.getElementById('btnPlay').disabled=false;
+    setStatus(`Áudio · ${audioBuffer.duration.toFixed(1)}s`);
+    if(mode==='puzzle')resetPuzzle();
+  }catch(err){setStatus('Erro. Tente .mp3 ou .m4a');}
+});
+
+function initAudio(){
+  audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  analyser=audioCtx.createAnalyser();
+  analyser.fftSize=2048;analyser.smoothingTimeConstant=0.8;
+  analyser.connect(audioCtx.destination);
+}
+
+function togglePlay(){
+  if(!audioBuffer)return;
+  if(isPlaying)stopAudio();else playAudio();
+}
+
+function playAudio(){
+  if(!audioCtx||!audioBuffer)return;
+  if(audioCtx.state==='suspended')audioCtx.resume();
+  if(source){try{source.stop()}catch(e){}}
+  source=audioCtx.createBufferSource();
+  source.buffer=audioBuffer;source.connect(analyser);
+  source.start(0);
+  source.onended=()=>{isPlaying=false;document.getElementById('btnPlay').textContent='▶ Play';if(mode==='puzzle')puzzleRunning=false;};
+  isPlaying=true;
+  document.getElementById('btnPlay').textContent='❚❚ Pausa';
+  if(mode==='puzzle'){
+    puzzleStartTime=audioCtx.currentTime;
+    puzzleRunning=true;
+    if(puzzlePieces.length===0)buildPuzzle();
+  }
+}
+
+function stopAudio(){
+  if(source){try{source.stop()}catch(e){} source=null;}
+  isPlaying=false;puzzleRunning=false;
+  document.getElementById('btnPlay').textContent='▶ Play';
+}
+
+function getBands(){
+  if(!analyser)return [0,0,0,0];
+  const data=new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  const binHz=audioCtx.sampleRate/analyser.fftSize;
+  return [[20,250],[250,800],[800,4000],[4000,20000]].map(([lo,hi])=>{
+    const s=Math.floor(lo/binHz),e=Math.min(Math.ceil(hi/binHz),data.length);
+    let sum=0;for(let i=s;i<e;i++)sum+=data[i];
+    return sum/((e-s)*255);
+  });
+}
+
+// ── Canvas ─────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+
+function resize(){
+  canvas.width=canvas.offsetWidth*window.devicePixelRatio;
+  canvas.height=canvas.offsetHeight*window.devicePixelRatio;
+  if(mode==='puzzle'&&puzzleImage)buildPuzzle();
+}
+window.addEventListener('resize',resize);resize();
+
+function draw(){
+  requestAnimationFrame(draw);
+  t+=0.016;
+  const W=canvas.width,H=canvas.height;
+  const bands=getBands();
+  if(mode==='covers')drawCovers(W,H,bands);
+  else if(mode==='ink')drawInk(W,H,bands);
+  else drawPuzzle(W,H,bands);
+}
+draw();
+
+// ── COVERS ─────────────────────────────────────────────────────────────────
+function drawCovers(W,H,bands){
+  ctx.fillStyle=`rgba(6,6,8,${pBlur})`;
+  ctx.fillRect(0,0,W,H);
+  const hasAny=images.some(Boolean);
+  if(!hasAny){drawIdleBars(W,H,bands);return;}
+  const order=[0,1,2,3].filter(i=>images[i]);
+  order.sort((a,b)=>imgData[a].scale-imgData[b].scale);
+  order.forEach(i=>{
+    const img=images[i];if(!img)return;
+    const band=bands[i]||0,d=imgData[i],m=pMotion;
+    switch(d.behavior){
+      case 0:
+        d.orbitAngle+=(d.orbitSpeed+band*0.04)*m;
+        const r=Math.min(W,H)*0.22*m;
+        d.x=W/2+Math.cos(d.orbitAngle)*r;
+        d.y=H/2+Math.sin(d.orbitAngle)*r*0.55;
+        d.angle+=(0.005+band*0.06)*m;
+        break;
+      case 1:
+        d.x=W/2+Math.sin(t*0.25+d.phase)*W*0.28*m;
+        d.y=H/2+Math.cos(t*0.18+d.phase)*H*0.22*m;
+        d.angle+=(0.003+band*0.05)*m*-1;
+        break;
+      case 2:
+        d.x=W/2+Math.cos(t*0.2+d.phase)*W*0.18*m;
+        d.y=H/2+Math.sin(t*0.3+d.phase)*H*0.28*m;
+        d.angle+=0.002*m;
+        break;
+      case 3:
+        d.x=W/2+Math.sin(t*0.4+d.phase)*W*0.32*m;
+        d.y=H*0.45+Math.cos(t*0.4+d.phase)*H*0.12*m;
+        d.angle=Math.sin(t*0.4+d.phase)*0.3*m;
+        break;
+    }
+    const baseSize=pScale*Math.min(W,H)*(0.55+i*0.08);
+    d.scale=baseSize+band*0.15*Math.min(W,H)*m;
+    ctx.save();
+    ctx.translate(d.x,d.y);
+    ctx.rotate(d.angle);
+    if(d.behavior===0){ctx.scale(1,0.7+Math.sin(d.orbitAngle)*0.3);}
+    if(pGlow>0&&band>0.04){ctx.shadowColor=BAND_COLORS[i];ctx.shadowBlur=band*50*pGlow;}
+    ctx.globalAlpha=0.35+band*0.65;
+    ctx.drawImage(img,-d.scale/2,-d.scale/2,d.scale,d.scale);
+    ctx.restore();
+  });
+  const avg=bands.reduce((a,b)=>a+b,0)/4;
+  if(avg>0.02){
+    ctx.beginPath();ctx.arc(W/2,H/2,Math.min(W,H)*(0.28+avg*0.12),0,Math.PI*2);
+    ctx.strokeStyle=`rgba(232,213,163,${avg*0.1})`;ctx.lineWidth=1;ctx.stroke();
+  }
+}
+
+function drawIdleBars(W,H,bands){
+  const bw=W/4;
+  bands.forEach((b,i)=>{
+    ctx.fillStyle=BAND_COLORS[i]+'2a';
+    ctx.fillRect(i*bw+2,H-b*H*0.5,bw-4,b*H*0.5);
+  });
+  ctx.fillStyle='rgba(232,213,163,.1)';
+  ctx.font=`${10*window.devicePixelRatio}px DM Mono`;
+  ctx.textAlign='center';
+  ctx.fillText('Carregue imagens para visualizar',W/2,H/2);
+}
+
+// ── INK ────────────────────────────────────────────────────────────────────
+function drawInk(W,H,bands){
+  ctx.fillStyle=`rgba(4,4,6,${pInkBlur})`;
+  ctx.fillRect(0,0,W,H);
+  const avg=bands.reduce((a,b)=>a+b,0)/4;
+  const bass=bands[0]||0,mid=bands[2]||0,high=bands[3]||0;
+  if(avg>0.03){
+    const count=Math.floor(avg*pInkDensity*pInkMotion)+1;
+    for(let n=0;n<count;n++){
+      const colorIdx=Math.floor(Math.random()*INK_COLORS.length);
+      const angle=Math.random()*Math.PI*2;
+      const dist=Math.random()*Math.min(W,H)*0.35*pInkMotion;
+      inkParticles.push({
+        x:W/2+Math.cos(angle)*dist,y:H/2+Math.sin(angle)*dist,
+        vx:(Math.random()-.5)*2*(1+bass*4)*pInkMotion,
+        vy:(Math.random()-.5)*2*(1+bass*4)*pInkMotion,
+        r:(2+Math.random()*20*(avg+bass))*pInkMotion,
+        color:INK_COLORS[colorIdx],alpha:0.6+Math.random()*0.4,
+        life:1,decay:0.003+Math.random()*0.008+high*0.02,spread:1+mid*3
+      });
+    }
+  }
+  inkParticles=inkParticles.filter(p=>{
+    p.life-=p.decay;if(p.life<=0)return false;
+    p.x+=p.vx*p.spread;p.y+=p.vy*p.spread;
+    p.vx*=0.97;p.vy*=0.97;p.r*=1.003;
+    const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r);
+    const [r,g2,b]=p.color;
+    g.addColorStop(0,`rgba(${r},${g2},${b},${p.alpha*p.life*0.8})`);
+    g.addColorStop(0.4,`rgba(${r},${g2},${b},${p.alpha*p.life*0.3})`);
+    g.addColorStop(1,`rgba(${r},${g2},${b},0)`);
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle=g;ctx.fill();
+    return true;
+  });
+  if(inkParticles.length>600)inkParticles.splice(0,inkParticles.length-600);
+}
+
+canvas.addEventListener('click',e=>{
+  if(mode!=='ink')return;
+  const rect=canvas.getBoundingClientRect();
+  spawnInkDrop((e.clientX-rect.left)*window.devicePixelRatio,(e.clientY-rect.top)*window.devicePixelRatio,0.5);
+});
+canvas.addEventListener('touchmove',e=>{
+  if(mode!=='ink')return;
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  Array.from(e.touches).forEach(touch=>{
+    spawnInkDrop((touch.clientX-rect.left)*window.devicePixelRatio,(touch.clientY-rect.top)*window.devicePixelRatio,0.3);
+  });
+},{passive:false});
+
+function spawnInkDrop(x,y,intensity){
+  const colorIdx=Math.floor(Math.random()*INK_COLORS.length);
+  for(let i=0;i<8;i++){
+    const angle=Math.random()*Math.PI*2;
+    const [r,g,b]=INK_COLORS[colorIdx];
+    inkParticles.push({x,y,vx:Math.cos(angle)*(1+Math.random()*3)*pInkMotion,vy:Math.sin(angle)*(1+Math.random()*3)*pInkMotion,r:5+Math.random()*25*intensity*pInkMotion,color:[r,g,b],alpha:0.7+Math.random()*0.3,life:1,decay:0.004+Math.random()*0.006,spread:1.5});
+  }
+}
+
+// ── PUZZLE ─────────────────────────────────────────────────────────────────
+function buildPuzzle(){
+  if(!puzzleImage)return;
+  const W=canvas.width,H=canvas.height;
+  const imgRatio=puzzleImage.width/puzzleImage.height;
+  const canvasRatio=W/H;
+
+  // Fit image into canvas maintaining aspect ratio
+  let drawW,drawH,drawX,drawY;
+  if(imgRatio>canvasRatio){drawW=W;drawH=W/imgRatio;drawX=0;drawY=(H-drawH)/2;}
+  else{drawH=H;drawW=H*imgRatio;drawX=(W-drawW)/2;drawY=0;}
+
+  // Calculate grid — favour vertical layout
+  const totalPieces=puzzlePieceCount;
+  const ratio=drawW/drawH;
+  puzzleRows=Math.round(Math.sqrt(totalPieces/ratio));
+  puzzleCols=Math.round(totalPieces/puzzleRows);
+
+  const pieceW=drawW/puzzleCols;
+  const pieceH=drawH/puzzleRows;
+
+  // Bake image into offscreen canvas at draw size
+  puzzleCanvas.width=drawW;puzzleCanvas.height=drawH;
+  const pc=puzzleCanvas.getContext('2d');
+  pc.drawImage(puzzleImage,0,0,drawW,drawH);
+
+  // Build shuffled piece list
+  puzzlePieces=[];
+  for(let row=0;row<puzzleRows;row++){
+    for(let col=0;col<puzzleCols;col++){
+      puzzlePieces.push({
+        col,row,
+        srcX:col*pieceW,srcY:row*pieceH,
+        destX:drawX+col*pieceW,destY:drawY+row*pieceH,
+        w:pieceW,h:pieceH,
+        // Random entry origin — from one of 4 edges
+        edge:Math.floor(Math.random()*4),
+        revealed:false,
+        // Slight random rotation for organic feel
+        initRot:(Math.random()-.5)*Math.PI*puzzleRotation*0.5,
+        // Animation state
+        animProgress:0,startX:0,startY:0
+      });
+    }
+  }
+
+  // Shuffle
+  for(let i=puzzlePieces.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [puzzlePieces[i],puzzlePieces[j]]=[puzzlePieces[j],puzzlePieces[i]];
+  }
+
+  // Set entry positions
+  puzzlePieces.forEach(p=>{
+    switch(p.edge){
+      case 0:p.startX=p.destX;p.startY=-p.h*2;break;
+      case 1:p.startX=W+p.w*2;p.startY=p.destY;break;
+      case 2:p.startX=p.destX;p.startY=H+p.h*2;break;
+      case 3:p.startX=-p.w*2;p.startY=p.destY;break;
+    }
+  });
+
+  puzzleRevealed=0;
+  puzzleLastReveal=0;
+  if(audioBuffer) puzzleInterval=audioBuffer.duration/puzzlePieces.length;
+  else puzzleInterval=2;
+
+  // Clear canvas
+  ctx.fillStyle='#060608';
+  ctx.fillRect(0,0,W,H);
+}
+
+function resetPuzzle(){
+  puzzleRunning=false;
+  buildPuzzle();
+  ctx.fillStyle='#060608';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  document.getElementById('puzzleProgress').textContent='';
+}
+
+function drawPuzzle(W,H,bands){
+  // Don't clear fully — pieces stay
+  const avg=bands.reduce((a,b)=>a+b,0)/4;
+
+  if(puzzleRunning&&audioCtx&&puzzlePieces.length>0){
+    const elapsed=audioCtx.currentTime-puzzleStartTime;
+    // Reveal next pieces on schedule
+    while(puzzleRevealed<puzzlePieces.length&&elapsed>=(puzzleRevealed+1)*puzzleInterval){
+      const p=puzzlePieces[puzzleRevealed];
+      p.revealed=true;p.animProgress=0;
+      puzzleRevealed++;
+    }
+    // Progress display
+    document.getElementById('puzzleProgress').textContent=
+      `${puzzleRevealed}/${puzzlePieces.length} peças`;
+  }
+
+  // Draw revealed pieces — animate entry
+  puzzlePieces.forEach(p=>{
+    if(!p.revealed)return;
+    if(p.animProgress<1){p.animProgress=Math.min(1,p.animProgress+0.06);}
+    const ease=1-Math.pow(1-p.animProgress,3); // cubic ease out
+    const cx=p.startX+(p.destX-p.startX)*ease;
+    const cy=p.startY+(p.destY-p.startY)*ease;
+    const rot=p.initRot*(1-ease);
+
+    ctx.save();
+    ctx.translate(cx+p.w/2,cy+p.h/2);
+    ctx.rotate(rot);
+    ctx.globalAlpha=0.3+ease*0.7;
+    ctx.drawImage(puzzleCanvas,p.srcX,p.srcY,p.w,p.h,-p.w/2,-p.h/2,p.w,p.h);
+    ctx.restore();
+  });
+
+  // Idle state
+  if(!puzzleRunning&&puzzleRevealed===0){
+    ctx.fillStyle='#060608';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(232,213,163,.08)';
+    ctx.font=`${10*window.devicePixelRatio}px DM Mono`;
+    ctx.textAlign='center';
+    if(!puzzleImage) ctx.fillText('Carregue uma imagem e áudio, depois Play',W/2,H/2);
+    else if(!audioBuffer) ctx.fillText('Carregue áudio e pressione Play',W/2,H/2);
+    else ctx.fillText('Pressione Play para revelar o puzzle',W/2,H/2);
+  }
+}
+
+// ── Mode switch ────────────────────────────────────────────────────────────
+function setMode(m){
+  mode=m;
+  ['covers','ink','puzzle'].forEach(id=>{
+    document.getElementById(`btnMode${id.charAt(0).toUpperCase()+id.slice(1)}`).classList.toggle('active',m===id);
+    document.getElementById(`ctrl${id.charAt(0).toUpperCase()+id.slice(1)}`).classList.toggle('visible',m===id);
+  });
+  ctx.fillStyle='#060608';ctx.fillRect(0,0,canvas.width,canvas.height);
+  inkParticles=[];
+  if(m==='puzzle'&&puzzleImage)buildPuzzle();
+}
+
+// ── Recording ──────────────────────────────────────────────────────────────
+function toggleRecord(){if(isRecording)stopRecord();else startRecord();}
+function startRecord(){
+  recordedChunks=[];recordedBlob=null;
+  document.getElementById('btnDown').style.display='none';
+  const stream=canvas.captureStream(30);
+  if(audioCtx&&analyser){
+    try{const dest=audioCtx.createMediaStreamDestination();analyser.connect(dest);dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));}catch(e){}
+  }
+  const mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':MediaRecorder.isTypeSupported('video/webm')?'video/webm':'video/mp4';
+  try{
+    mediaRecorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:5000000});
+    mediaRecorder.ondataavailable=e=>{if(e.data.size>0)recordedChunks.push(e.data);};
+    mediaRecorder.onstop=()=>{recordedBlob=new Blob(recordedChunks,{type:mime});document.getElementById('btnDown').style.display='block';setStatus(`Pronto · ${(recordedBlob.size/1024/1024).toFixed(1)}MB`);};
+    mediaRecorder.start(100);isRecording=true;
+    document.getElementById('btnRec').className='btn recording';
+    document.getElementById('btnRec').textContent='⏹ Parar';
+    setStatus('Gravando...');
+    if(!isPlaying&&audioBuffer)playAudio();
+  }catch(e){setStatus('Gravação não suportada. Use Chrome desktop.');}
+}
+function stopRecord(){
+  if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();
+  isRecording=false;
+  document.getElementById('btnRec').className='btn rec';
+  document.getElementById('btnRec').textContent='⏺ Rec';
+}
+function downloadVideo(){
+  if(!recordedBlob)return;
+  const url=URL.createObjectURL(recordedBlob);
+  const a=document.createElement('a');a.href=url;a.download=`psicoscopio-${Date.now()}.webm`;a.click();URL.revokeObjectURL(url);
+}
+
+// ── Sliders ────────────────────────────────────────────────────────────────
+[['slBlur','vBlur',2,v=>pBlur=v],
+ ['slMotion','vMotion',1,v=>pMotion=v],
+ ['slGlow','vGlow',2,v=>pGlow=v],
+ ['slScale','vScale',2,v=>pScale=v],
+ ['slInkBlur','vInkBlur',3,v=>pInkBlur=v],
+ ['slInkMotion','vInkMotion',1,v=>pInkMotion=v],
+ ['slInkDensity','vInkDensity',0,v=>pInkDensity=v],
+ ['slPieces','vPieces',0,v=>{puzzlePieceCount=v;if(mode==='puzzle')resetPuzzle();}],
+ ['slPuzzleRot','vPuzzleRot',1,v=>puzzleRotation=v],
+].forEach(([id,vid,dec,fn])=>{
+  document.getElementById(id).addEventListener('input',function(){
+    const v=parseFloat(this.value);
+    document.getElementById(vid).textContent=v.toFixed(dec);fn(v);
+  });
+});
+
+function setStatus(msg){document.getElementById('status').textContent=msg;}
+</script>
+</body>
+</html>
