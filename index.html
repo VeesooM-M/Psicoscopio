@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Psicoscópio · M&M</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:ital,wght@0,400;1,400&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400&family=Playfair+Display:ital,wght@0,400;1,400&family=Montserrat:wght@700;800&display=swap');
   :root{--bg:#060608;--border:#1a1a22;--accent:#e8d5a3;--muted:#444;}
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%;background:var(--bg);color:#e8e8e8;font-family:'DM Mono',monospace;overflow:hidden}
@@ -867,31 +867,78 @@ function resetPuzzle(){
   document.getElementById('pProgress').textContent='';
 }
 
+// Low-poly wireframe "M" — faceted letterform, drawn as thin translucent lines only
+function drawWireframeM(cx,cy,size,alpha,rot){
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(rot);
+  ctx.strokeStyle=`rgba(232,213,163,${alpha})`;
+  ctx.lineWidth=Math.max(0.6,size*0.0035);
+
+  // M silhouette vertices (normalized -1..1), faceted style echoing the logo mark
+  const pts=[
+    [-1,1],[-1,-0.9],[-0.62,-1],[-0.6,0.35],
+    [-0.18,-0.65],[0,0.15],[0.18,-0.65],[0.6,0.35],
+    [0.62,-1],[1,-0.9],[1,1],[0.68,1],[0.68,-0.25],
+    [0.3,0.75],[0,-0.15],[-0.3,0.75],[-0.68,-0.25],[-0.68,1]
+  ];
+  const s=pts.map(([x,y])=>[x*size,y*size]);
+
+  // Outer contour
+  ctx.beginPath();
+  s.forEach((p,i)=>i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]));
+  ctx.closePath();
+  ctx.stroke();
+
+  // Internal facet lines — gives the low-poly / wire-construction look
+  const facets=[
+    [0,3],[3,13],[13,4],[4,14],[14,6],[6,15],[15,7],[7,16],[16,9],
+    [1,3],[8,7],[2,4],[5,14],[16,17],[13,17],[11,13],[16,0]
+  ];
+  ctx.globalAlpha=alpha*0.55;
+  facets.forEach(([a,b])=>{
+    ctx.beginPath();
+    ctx.moveTo(s[a][0],s[a][1]);
+    ctx.lineTo(s[b][0],s[b][1]);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
 function drawBrandCard(W,H,alpha){
-  // Default M&M brand intro card - matches Psicoscópio visual identity
+  // Default M&M brand intro card — M&M wordmark primary, Psicoscópio as subtitle
   ctx.save();
   ctx.globalAlpha=alpha;
   ctx.fillStyle='#060608';
   ctx.fillRect(0,0,W,H);
   const cx=W/2,cy=H/2;
   const pulse=0.5+Math.sin(brandLogoT*2)*0.5;
-  // Subtle glow ring
-  const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*0.32);
-  grad.addColorStop(0,`rgba(232,213,163,${0.08+pulse*0.05})`);
+
+  // Subtle glow field behind everything
+  const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*0.38);
+  grad.addColorStop(0,`rgba(232,213,163,${0.07+pulse*0.04})`);
   grad.addColorStop(1,'rgba(232,213,163,0)');
   ctx.fillStyle=grad;
   ctx.fillRect(0,0,W,H);
-  // Eyebrow
-  ctx.fillStyle='rgba(232,213,163,0.7)';
-  ctx.font=`${Math.round(W*0.018)}px 'DM Mono', monospace`;
+
+  // Wireframe M — large, translucent, slow breathing rotation, sits behind the text
+  const wireAlpha=0.22+pulse*0.1;
+  const wireRot=Math.sin(brandLogoT*0.15)*0.04;
+  drawWireframeM(cx,cy-Math.min(W,H)*0.06,Math.min(W,H)*0.30,wireAlpha,wireRot);
+
+  // M&M wordmark — primary, bold geometric sans
+  ctx.fillStyle='#f0e6cc';
   ctx.textAlign='center';
-  ctx.letterSpacing=`${Math.round(W*0.006)}px`;
-  ctx.fillText('MORAIS & MOREIRA',cx,cy-Math.min(W,H)*0.05);
-  // Main wordmark
+  ctx.font=`800 ${Math.round(W*0.075)}px 'Montserrat', sans-serif`;
+  ctx.letterSpacing=`${Math.round(W*0.002)}px`;
+  ctx.fillText('MorAIs & Moreira',cx,cy+Math.min(W,H)*0.20);
+
+  // Psicoscópio — subtitle, smaller, italic serif, clearly secondary
   ctx.letterSpacing='0px';
-  ctx.fillStyle='#e8e8e8';
-  ctx.font=`italic ${Math.round(W*0.09)}px 'Playfair Display', serif`;
-  ctx.fillText('Psicoscópio',cx,cy+Math.min(W,H)*0.04);
+  ctx.fillStyle='rgba(232,213,163,0.75)';
+  ctx.font=`italic ${Math.round(W*0.032)}px 'Playfair Display', serif`;
+  ctx.fillText('Psicoscópio',cx,cy+Math.min(W,H)*0.27);
+
   ctx.restore();
 }
 
@@ -918,7 +965,7 @@ function drawPuzzle(W,H,bands){
   // Intro sequence — plays once per Play press, before puzzle pieces begin
   if(puzzleRunning&&!introDone){
     const introElapsed=audioCtx?audioCtx.currentTime-introStartTime:0;
-    const fadeDur=0.4; // seconds for fade in/out
+    const fadeDur=0.2; // seconds for fade in/out
     let alpha=1;
     if(introElapsed<fadeDur) alpha=introElapsed/fadeDur;
     else if(introElapsed>introDuration-fadeDur) alpha=Math.max(0,(introDuration-introElapsed)/fadeDur);
