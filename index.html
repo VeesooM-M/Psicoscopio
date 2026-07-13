@@ -137,10 +137,16 @@
         <input type="file" id="pImgIn" accept="image/*" style="display:none">
         <span>+ Img</span>
       </div>
+      <div class="pslot" id="teaserSlot" onclick="document.getElementById('teaserImgIn').click()">
+        <input type="file" id="teaserImgIn" accept="image/*" style="display:none">
+        <span id="teaserSlotLabel">+ Teaser<br>(opcional)</span>
+        <span class="remx" id="teaserDel" style="display:none" onclick="clearTeaser(event)">✕</span>
+      </div>
       <div style="font-size:8px;color:var(--muted);line-height:1.8;margin-left:6px">Puzzle revela<br>ao ritmo da música</div>
     </div>
     <div class="sliders">
       <div class="sl"><span>Peças</span><input type="range" id="slPieces" min="20" max="120" step="4" value="70"><span class="val" id="vPieces">70</span></div>
+      <div class="sl"><span>Intro</span><input type="range" id="slIntroDur" min="1" max="5" step="0.5" value="2.5"><span class="val" id="vIntroDur">2.5s</span></div>
     </div>
     <div class="row">
       <button class="btn" onclick="resetPuzzle()">↺ Reset</button>
@@ -191,6 +197,7 @@ let puzzleImage=null,puzzlePieces=[],puzzleRevealed=0,puzzleInterval=0;
 let puzzleStartTime=0,puzzleRunning=false,puzzleCompletionFade=0;
 let puzzlePieceCount=70,puzzleCanvas=document.createElement('canvas');
 let puzzleCols=0,puzzleRows=0;
+let teaserImage=null,introDuration=2.5,introDone=false,introStartTime=0,brandLogoT=0;
 
 // Recording
 let mediaRecorder,recordedChunks=[],isRecording=false,recordedBlob=null;
@@ -237,6 +244,28 @@ document.getElementById('pImgIn').addEventListener('change',async e=>{
   setStatus('Imagem do puzzle carregada');
   resetPuzzle();
 });
+
+// Teaser image slot (optional)
+document.getElementById('teaserImgIn').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file)return;
+  teaserImage=await createImageBitmap(file);
+  const slot=document.getElementById('teaserSlot');
+  slot.classList.add('loaded');
+  let img=slot.querySelector('img');
+  if(!img){img=document.createElement('img');slot.insertBefore(img,slot.firstChild.nextSibling);}
+  img.src=URL.createObjectURL(file);
+  document.getElementById('teaserDel').style.display='';
+  setStatus('Teaser carregada');
+});
+
+function clearTeaser(e){
+  e.stopPropagation();
+  teaserImage=null;
+  const slot=document.getElementById('teaserSlot');
+  slot.classList.remove('loaded');
+  const img=slot.querySelector('img');if(img)img.remove();
+  document.getElementById('teaserDel').style.display='none';
+}
 
 // ── Image loaders ─────────────────────────────────────────────────────────────
 async function loadCoverImg(idx,e){
@@ -303,7 +332,11 @@ function playAudio(){
   };
   isPlaying=true;
   document.getElementById('btnPlay').textContent='❚❚ Pausa';
-  if(mode==='puzzle'){puzzleStartTime=audioCtx.currentTime;puzzleRunning=true;if(!puzzlePieces.length)buildPuzzle();}
+  if(mode==='puzzle'){
+    introStartTime=audioCtx.currentTime;introDone=false;
+    puzzleRunning=true;
+    if(!puzzlePieces.length)buildPuzzle();
+  }
 }
 
 function stopAudio(){
@@ -822,19 +855,82 @@ function buildPuzzle(){
   }
   for(let i=puzzlePieces.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[puzzlePieces[i],puzzlePieces[j]]=[puzzlePieces[j],puzzlePieces[i]];}
   puzzleRevealed=0;puzzleCompletionFade=0;
-  puzzleInterval=audioBuffer?(audioBuffer.duration*0.96)/puzzlePieces.length:2;
+  const usableDuration=audioBuffer?Math.max(1,audioBuffer.duration-introDuration):2;
+  puzzleInterval=(usableDuration*0.96)/puzzlePieces.length;
   ctx.fillStyle='#060608';ctx.fillRect(0,0,W,H);
 }
 
 function resetPuzzle(){
-  puzzleRunning=false;puzzleCompletionFade=0;
+  puzzleRunning=false;puzzleCompletionFade=0;introDone=false;
   buildPuzzle();
   ctx.fillStyle='#060608';ctx.fillRect(0,0,canvas.width,canvas.height);
   document.getElementById('pProgress').textContent='';
 }
 
+function drawBrandCard(W,H,alpha){
+  // Default M&M brand intro card - matches Psicoscópio visual identity
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle='#060608';
+  ctx.fillRect(0,0,W,H);
+  const cx=W/2,cy=H/2;
+  const pulse=0.5+Math.sin(brandLogoT*2)*0.5;
+  // Subtle glow ring
+  const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*0.32);
+  grad.addColorStop(0,`rgba(232,213,163,${0.08+pulse*0.05})`);
+  grad.addColorStop(1,'rgba(232,213,163,0)');
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,0,W,H);
+  // Eyebrow
+  ctx.fillStyle='rgba(232,213,163,0.7)';
+  ctx.font=`${Math.round(W*0.018)}px 'DM Mono', monospace`;
+  ctx.textAlign='center';
+  ctx.letterSpacing=`${Math.round(W*0.006)}px`;
+  ctx.fillText('MORAIS & MOREIRA',cx,cy-Math.min(W,H)*0.05);
+  // Main wordmark
+  ctx.letterSpacing='0px';
+  ctx.fillStyle='#e8e8e8';
+  ctx.font=`italic ${Math.round(W*0.09)}px 'Playfair Display', serif`;
+  ctx.fillText('Psicoscópio',cx,cy+Math.min(W,H)*0.04);
+  ctx.restore();
+}
+
+function drawTeaserOrBrand(W,H,alpha){
+  if(teaserImage){
+    ctx.save();
+    ctx.globalAlpha=alpha;
+    ctx.fillStyle='#060608';ctx.fillRect(0,0,W,H);
+    const ir=teaserImage.width/teaserImage.height,cr=W/H;
+    let dW,dH,dX,dY;
+    if(ir>cr){dW=W;dH=W/ir;dX=0;dY=(H-dH)/2;}
+    else{dH=H;dW=H*ir;dX=(W-dW)/2;dY=0;}
+    ctx.drawImage(teaserImage,dX,dY,dW,dH);
+    ctx.restore();
+  }else{
+    drawBrandCard(W,H,alpha);
+  }
+}
+
 function drawPuzzle(W,H,bands){
+  brandLogoT+=0.016;
   ctx.fillStyle='#060608';ctx.fillRect(0,0,W,H);
+
+  // Intro sequence — plays once per Play press, before puzzle pieces begin
+  if(puzzleRunning&&!introDone){
+    const introElapsed=audioCtx?audioCtx.currentTime-introStartTime:0;
+    const fadeDur=0.4; // seconds for fade in/out
+    let alpha=1;
+    if(introElapsed<fadeDur) alpha=introElapsed/fadeDur;
+    else if(introElapsed>introDuration-fadeDur) alpha=Math.max(0,(introDuration-introElapsed)/fadeDur);
+    drawTeaserOrBrand(W,H,Math.min(1,Math.max(0,alpha)));
+    if(introElapsed>=introDuration){
+      introDone=true;
+      puzzleStartTime=audioCtx.currentTime; // puzzle timing starts fresh after intro
+    }
+    document.getElementById('pProgress').textContent='';
+    return;
+  }
+
   if(puzzleRunning&&audioCtx&&puzzlePieces.length){
     const elapsed=audioCtx.currentTime-puzzleStartTime;
     while(puzzleRevealed<puzzlePieces.length&&elapsed>=(puzzleRevealed+1)*puzzleInterval){
@@ -977,6 +1073,7 @@ const lfoFmt=v=>v<0.01?'off':v.toFixed(2);
  ['slShpRough','vShpRough',2,'',v=>pShpRough=v],
  ['slShpLFO','vShpLFO',0,'',v=>{lfoShapes=v;document.getElementById('vShpLFO').textContent=lfoFmt(v);}],
  ['slPieces','vPieces',0,'',v=>{puzzlePieceCount=v;if(mode==='puzzle')resetPuzzle();}],
+ ['slIntroDur','vIntroDur',1,'s',v=>{introDuration=v;if(mode==='puzzle')resetPuzzle();}],
  ['slFrmBlur','vFrmBlur',3,'',v=>pFrmBlur=v],
  ['slFrmDots','vFrmDots',0,'',v=>{pFrmDots=Math.round(v);frmInitDone=false;}],
  ['slFrmSize','vFrmSize',1,'',v=>pFrmSize=v],
