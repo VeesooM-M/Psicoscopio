@@ -923,7 +923,7 @@ function drawBrandCard(W,H,alpha){
 
   // Wireframe M — large, translucent, slow breathing rotation, sits behind the text
   const wireAlpha=0.22+pulse*0.1;
-  const wireRot=Math.sin(brandLogoT*0.15)*0.04;
+  const wireRot=brandLogoT*0.25;
   drawWireframeM(cx,cy-Math.min(W,H)*0.06,Math.min(W,H)*0.30,wireAlpha,wireRot);
 
   // M&M wordmark — primary, light weight, outline only (matches wireframe M spirit but bolder stroke)
