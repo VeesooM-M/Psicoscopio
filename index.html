@@ -926,12 +926,14 @@ function drawBrandCard(W,H,alpha){
   const wireRot=Math.sin(brandLogoT*0.15)*0.04;
   drawWireframeM(cx,cy-Math.min(W,H)*0.06,Math.min(W,H)*0.30,wireAlpha,wireRot);
 
-  // M&M wordmark — primary, bold geometric sans
-  ctx.fillStyle='#f0e6cc';
+  // M&M wordmark — primary, light weight, outline only (matches wireframe M spirit but bolder stroke)
+  const mmFontSize=Math.round(W*0.058);
+  ctx.strokeStyle='#f0e6cc';
   ctx.textAlign='center';
-  ctx.font=`800 ${Math.round(W*0.075)}px 'Montserrat', sans-serif`;
-  ctx.letterSpacing=`${Math.round(W*0.002)}px`;
-  ctx.fillText('MorAIs & Moreira',cx,cy+Math.min(W,H)*0.20);
+  ctx.font=`300 ${mmFontSize}px 'Montserrat', sans-serif`;
+  ctx.letterSpacing=`${Math.round(W*0.0015)}px`;
+  ctx.lineWidth=Math.max(0.6,mmFontSize*0.018);
+  ctx.strokeText('MorAIs & Moreira',cx,cy+Math.min(W,H)*0.20);
 
   // Psicoscópio — subtitle, smaller, italic serif, clearly secondary
   ctx.letterSpacing='0px';
