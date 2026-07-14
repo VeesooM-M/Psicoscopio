@@ -868,41 +868,56 @@ function resetPuzzle(){
 }
 
 // Low-poly wireframe "M" — faceted letterform, drawn as thin translucent lines only
+// Verified single-M point set — reused twice below to build the M&M double mark
+const WIRE_M_PTS=[
+  [-1,1],[-1,-1],[-0.55,-1],
+  [0,0.3],
+  [0.55,-1],[1,-1],[1,1],
+  [0.65,1],[0.65,-0.3],
+  [0,0.7],
+  [-0.65,-0.3],[-0.65,1]
+];
+const WIRE_M_FACETS=[
+  [0,3],[2,3],[3,4],[3,9],[1,2],[4,5],[9,8],[9,10],[7,9],[0,11],[6,7]
+];
+
+function drawSingleM(size,alpha,mirror){
+  const pts=WIRE_M_PTS.map(([x,y])=>[mirror?-x:x,y]);
+  const s=pts.map(([x,y])=>[x*size,y*size]);
+  ctx.beginPath();
+  s.forEach((p,i)=>i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]));
+  ctx.closePath();
+  ctx.stroke();
+  ctx.globalAlpha=alpha*0.5;
+  WIRE_M_FACETS.forEach(([a,b])=>{
+    ctx.beginPath();
+    ctx.moveTo(s[a][0],s[a][1]);
+    ctx.lineTo(s[b][0],s[b][1]);
+    ctx.stroke();
+  });
+  ctx.globalAlpha=alpha;
+}
+
 function drawWireframeM(cx,cy,size,alpha,rot){
+  // Two mirrored M's side by side — reads as "M&M", each one the verified clean single-M shape
   ctx.save();
   ctx.translate(cx,cy);
   ctx.rotate(rot);
   ctx.strokeStyle=`rgba(232,213,163,${alpha})`;
   ctx.lineWidth=Math.max(0.6,size*0.0035);
 
-  // M silhouette vertices (normalized -1..1) — verified single clean M, outer+inner leg edges
-  const pts=[
-    [-1,1],[-1,-1],[-0.55,-1],
-    [0,0.3],
-    [0.55,-1],[1,-1],[1,1],
-    [0.65,1],[0.65,-0.3],
-    [0,0.7],
-    [-0.65,-0.3],[-0.65,1]
-  ];
-  const s=pts.map(([x,y])=>[x*size,y*size]);
+  const gap=size*1.15; // distance between the two M centers
 
-  // Outer contour
-  ctx.beginPath();
-  s.forEach((p,i)=>i===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]));
-  ctx.closePath();
-  ctx.stroke();
+  ctx.save();
+  ctx.translate(-gap,0);
+  drawSingleM(size,alpha,false);
+  ctx.restore();
 
-  // Internal facet lines — low-poly / wire-construction look, verified against a single M
-  const facets=[
-    [0,3],[2,3],[3,4],[3,9],[1,2],[4,5],[9,8],[9,10],[7,9],[0,11],[6,7]
-  ];
-  ctx.globalAlpha=alpha*0.5;
-  facets.forEach(([a,b])=>{
-    ctx.beginPath();
-    ctx.moveTo(s[a][0],s[a][1]);
-    ctx.lineTo(s[b][0],s[b][1]);
-    ctx.stroke();
-  });
+  ctx.save();
+  ctx.translate(gap,0);
+  drawSingleM(size,alpha,true);
+  ctx.restore();
+
   ctx.restore();
 }
 
@@ -925,7 +940,7 @@ function drawBrandCard(W,H,alpha){
   // Wireframe M — large, translucent, slow breathing rotation, sits behind the text
   const wireAlpha=0.22+pulse*0.1;
   const wireRot=brandLogoT*0.25;
-  drawWireframeM(cx,cy-Math.min(W,H)*0.06,Math.min(W,H)*0.30,wireAlpha,wireRot);
+  drawWireframeM(cx,cy-Math.min(W,H)*0.06,Math.min(W,H)*0.18,wireAlpha,wireRot);
 
   // M&M wordmark — primary, light weight, outline only (matches wireframe M spirit but bolder stroke)
   const mmFontSize=Math.round(W*0.058);
