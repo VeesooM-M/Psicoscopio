@@ -899,40 +899,43 @@ function drawWireframeM(cx,cy,size,alpha,rotY){
 }
 
 function drawBrandCard(W,H,alpha){
-  // Default M&M brand intro card — M&M wordmark primary, Psicoscópio as subtitle
+  // Default M&M brand intro card — vertically compact, centered within min(W,H)
+  // so it survives cropping from landscape recordings into 9:16 vertical publishing
   ctx.save();
   ctx.globalAlpha=alpha;
   ctx.fillStyle='#060608';
   ctx.fillRect(0,0,W,H);
   const cx=W/2,cy=H/2;
+  const M=Math.min(W,H); // safe-zone unit — never scale critical content by W alone
   const pulse=0.5+Math.sin(brandLogoT*2)*0.5;
 
   // Subtle glow field behind everything
-  const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.min(W,H)*0.38);
+  const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,M*0.42);
   grad.addColorStop(0,`rgba(232,213,163,${0.07+pulse*0.04})`);
   grad.addColorStop(1,'rgba(232,213,163,0)');
   ctx.fillStyle=grad;
   ctx.fillRect(0,0,W,H);
 
-  // Wireframe M — large, translucent, slow breathing rotation, sits behind the text
+  // Wireframe M — translucent, breathing rotation, base meets "& Moreira" baseline
   const wireAlpha=0.22+pulse*0.1;
   const wireRot=brandLogoT*0.25;
-  drawWireframeM(cx,cy-Math.min(W,H)*0.06,Math.min(W,H)*0.32,wireAlpha,wireRot);
+  drawWireframeM(cx,cy-M*0.12,M*0.24,wireAlpha,wireRot);
 
-  // M&M wordmark — primary, light weight, outline only (matches wireframe M spirit but bolder stroke)
-  const mmFontSize=Math.round(W*0.058);
+  // MorAIs & Moreira — two stacked lines, outline only, sized by M not W
+  const mmFontSize=Math.round(M*0.075);
   ctx.strokeStyle='#f0e6cc';
   ctx.textAlign='center';
   ctx.font=`300 ${mmFontSize}px 'Montserrat', sans-serif`;
-  ctx.letterSpacing=`${Math.round(W*0.0015)}px`;
+  ctx.letterSpacing=`${Math.round(M*0.002)}px`;
   ctx.lineWidth=Math.max(0.6,mmFontSize*0.018);
-  ctx.strokeText('MorAIs & Moreira',cx,cy+Math.min(W,H)*0.20);
+  ctx.strokeText('MorAIs',cx,cy+M*0.01);
+  ctx.strokeText('& Moreira',cx,cy+M*0.105);
 
-  // Psicoscópio — subtitle, smaller, italic serif, clearly secondary
+  // Psicoscópio — subtitle, sized by M not W
   ctx.letterSpacing='0px';
   ctx.fillStyle='rgba(232,213,163,0.75)';
-  ctx.font=`italic ${Math.round(W*0.032)}px 'Playfair Display', serif`;
-  ctx.fillText('Psicoscópio',cx,cy+Math.min(W,H)*0.27);
+  ctx.font=`italic ${Math.round(M*0.04)}px 'Playfair Display', serif`;
+  ctx.fillText('Psicoscópio',cx,cy+M*0.20);
 
   ctx.restore();
 }
