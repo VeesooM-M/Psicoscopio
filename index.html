@@ -74,6 +74,17 @@
     <button class="btn" id="btnDown" onclick="downloadVideo()" style="display:none">↓ Baixar</button>
   </div>
 
+  <!-- SHARED TEASER — optional, off by default, available in every mode -->
+  <div class="row">
+    <button class="btn" id="btnTeaserToggle" onclick="toggleTeaserEnabled()">Teaser: Off</button>
+    <div class="pslot" id="teaserSlot" onclick="document.getElementById('teaserImgIn').click()" style="display:none">
+      <input type="file" id="teaserImgIn" accept="image/*" style="display:none">
+      <span id="teaserSlotLabel">+ Teaser<br>(opcional)</span>
+      <span class="remx" id="teaserDel" style="display:none" onclick="clearTeaser(event)">✕</span>
+    </div>
+    <div class="sl" id="introDurRow" style="display:none"><span>Intro</span><input type="range" id="slIntroDur" min="1" max="5" step="0.5" value="2.5"><span class="val" id="vIntroDur">2.5s</span></div>
+  </div>
+
   <!-- COVERS -->
   <div class="ctrl-section visible" id="ctrlCovers">
     <div class="row"><div class="slots" id="slots"></div></div>
@@ -137,16 +148,10 @@
         <input type="file" id="pImgIn" accept="image/*" style="display:none">
         <span>+ Img</span>
       </div>
-      <div class="pslot" id="teaserSlot" onclick="document.getElementById('teaserImgIn').click()">
-        <input type="file" id="teaserImgIn" accept="image/*" style="display:none">
-        <span id="teaserSlotLabel">+ Teaser<br>(opcional)</span>
-        <span class="remx" id="teaserDel" style="display:none" onclick="clearTeaser(event)">✕</span>
-      </div>
       <div style="font-size:8px;color:var(--muted);line-height:1.8;margin-left:6px">Puzzle revela<br>ao ritmo da música</div>
     </div>
     <div class="sliders">
       <div class="sl"><span>Peças</span><input type="range" id="slPieces" min="20" max="120" step="4" value="70"><span class="val" id="vPieces">70</span></div>
-      <div class="sl"><span>Intro</span><input type="range" id="slIntroDur" min="1" max="5" step="0.5" value="2.5"><span class="val" id="vIntroDur">2.5s</span></div>
     </div>
     <div class="row">
       <button class="btn" onclick="resetPuzzle()">↺ Reset</button>
@@ -197,7 +202,7 @@ let puzzleImage=null,puzzlePieces=[],puzzleRevealed=0,puzzleInterval=0;
 let puzzleStartTime=0,puzzleRunning=false,puzzleCompletionFade=0;
 let puzzlePieceCount=70,puzzleCanvas=document.createElement('canvas');
 let puzzleCols=0,puzzleRows=0;
-let teaserImage=null,introDuration=2.5,introDone=false,introStartTime=0,brandLogoT=0;
+let teaserImage=null,introDuration=2.5,introDone=false,introStartTime=0,brandLogoT=0,showIntro=false,teaserEnabled=false;
 
 // Recording
 let mediaRecorder,recordedChunks=[],isRecording=false,recordedBlob=null;
@@ -257,6 +262,14 @@ document.getElementById('teaserImgIn').addEventListener('change',async e=>{
   document.getElementById('teaserDel').style.display='';
   setStatus('Teaser carregada');
 });
+
+function toggleTeaserEnabled(){
+  teaserEnabled=!teaserEnabled;
+  document.getElementById('btnTeaserToggle').textContent = teaserEnabled ? 'Teaser: On' : 'Teaser: Off';
+  document.getElementById('btnTeaserToggle').classList.toggle('on', teaserEnabled);
+  document.getElementById('teaserSlot').style.display = teaserEnabled ? 'flex' : 'none';
+  document.getElementById('introDurRow').style.display = teaserEnabled ? 'flex' : 'none';
+}
 
 function clearTeaser(e){
   e.stopPropagation();
@@ -332,8 +345,8 @@ function playAudio(){
   };
   isPlaying=true;
   document.getElementById('btnPlay').textContent='❚❚ Pausa';
+  introStartTime=audioCtx.currentTime;introDone=false;showIntro=teaserEnabled;
   if(mode==='puzzle'){
-    introStartTime=audioCtx.currentTime;introDone=false;
     puzzleRunning=true;
     if(!puzzlePieces.length)buildPuzzle();
   }
@@ -341,7 +354,7 @@ function playAudio(){
 
 function stopAudio(){
   if(source){try{source.stop()}catch(e){} source=null;}
-  isPlaying=false;puzzleRunning=false;
+  isPlaying=false;puzzleRunning=false;showIntro=false;
   document.getElementById('btnPlay').textContent='▶ Play';
 }
 
@@ -395,6 +408,7 @@ draw();
 
 // ── COVERS ────────────────────────────────────────────────────────────────────
 function drawCovers(W,H,bands){
+  if(renderIntroIfActive(W,H))return;
   const lfoVal=lfo();
   ctx.fillStyle=`rgba(6,6,8,${pBlur+lfoVal*0.05})`;
   ctx.fillRect(0,0,W,H);
@@ -446,6 +460,7 @@ function drawIdleBars(W,H,bands){
 
 // ── INK ───────────────────────────────────────────────────────────────────────
 function drawInk(W,H,bands){
+  if(renderIntroIfActive(W,H))return;
   const lfoVal=lfo();
   ctx.fillStyle=`rgba(4,4,6,${pInkBlur+lfoVal*0.01})`;
   ctx.fillRect(0,0,W,H);
@@ -603,6 +618,7 @@ function mbolt(x1,y1,x2,y2,depth,rough,col){
 }
 
 function drawShapes(W,H,bands){
+  if(renderIntroIfActive(W,H))return;
   const lfoVal=lfo();
   ctx.fillStyle=`rgba(6,6,8,${pShpBlur})`;ctx.fillRect(0,0,W,H);
   const avg=bands.reduce((a,b)=>a+b,0)/4;
@@ -760,6 +776,7 @@ function frmInit(W,H){
 }
 
 function drawFormula(W,H,bands){
+  if(renderIntroIfActive(W,H))return;
   const bass=bands[0]||0,mid=bands[1]||0,high=bands[3]||0;
   const avg=bands.reduce((a,b)=>a+b,0)/4;
   const lp=lfoPhase;
@@ -956,25 +973,28 @@ function drawTeaserOrBrand(W,H,alpha){
   }
 }
 
-function drawPuzzle(W,H,bands){
+// Reusable intro overlay — shared across every mode. Returns true while the
+// intro is still showing (caller should skip drawing its own content that frame).
+function renderIntroIfActive(W,H,onComplete){
   brandLogoT+=0.016;
+  if(!showIntro||introDone)return false;
   ctx.fillStyle='#060608';ctx.fillRect(0,0,W,H);
-
-  // Intro sequence — plays once per Play press, before puzzle pieces begin
-  if(puzzleRunning&&!introDone){
-    const introElapsed=audioCtx?audioCtx.currentTime-introStartTime:0;
-    const fadeDur=0.2; // seconds for fade in/out
-    let alpha=1;
-    if(introElapsed<fadeDur) alpha=introElapsed/fadeDur;
-    else if(introElapsed>introDuration-fadeDur) alpha=Math.max(0,(introDuration-introElapsed)/fadeDur);
-    drawTeaserOrBrand(W,H,Math.min(1,Math.max(0,alpha)));
-    if(introElapsed>=introDuration){
-      introDone=true;
-      puzzleStartTime=audioCtx.currentTime; // puzzle timing starts fresh after intro
-    }
-    document.getElementById('pProgress').textContent='';
-    return;
+  const introElapsed=audioCtx?audioCtx.currentTime-introStartTime:0;
+  const fadeDur=0.2;
+  let alpha=1;
+  if(introElapsed<fadeDur) alpha=introElapsed/fadeDur;
+  else if(introElapsed>introDuration-fadeDur) alpha=Math.max(0,(introDuration-introElapsed)/fadeDur);
+  drawTeaserOrBrand(W,H,Math.min(1,Math.max(0,alpha)));
+  if(introElapsed>=introDuration){
+    introDone=true;
+    if(onComplete)onComplete();
   }
+  return true;
+}
+
+function drawPuzzle(W,H,bands){
+  if(renderIntroIfActive(W,H,()=>{ puzzleStartTime=audioCtx.currentTime; document.getElementById('pProgress').textContent=''; })) return;
+  ctx.fillStyle='#060608';ctx.fillRect(0,0,W,H);
 
   if(puzzleRunning&&audioCtx&&puzzlePieces.length){
     const elapsed=audioCtx.currentTime-puzzleStartTime;
